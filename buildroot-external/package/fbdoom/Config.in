@@ -1,0 +1,4 @@
+config BR2_PACKAGE_FBDOOM
+	bool "fbdoom"
+	help
+	  fbdoom is a Linux port of DOOM with framebuffer output support
