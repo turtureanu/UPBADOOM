@@ -1,10 +1,15 @@
 # UPBADOOM
 
-**U**ncomplicated **P**re-**B**oot **A**uthentication and **DOOM** image for Self-Encrypting Drives.
+**U**ncomplicated **P**re-**B**oot **A**uthentication and **DOOM** image
 
-Just another LinuxPBA with the option to play DOOM.
+Just another SED PBA with the option to play fbDOOM.
 
-The project is made out of a few basic components:
+> [!IMPORTANT]
+> SYSLINUX has trouble booting the bzImage (kernel) built by buildroot. \
+> The immediate fix is to replace it with a working one from e.g. ChubbyAnt's repo. \
+> Not sure what causes this problem, might want to use a [Unified Kernel Image](https://wiki.archlinux.org/title/Unified_kernel_image) in the future instead.
+
+The project is made using [buildroot](https://buildroot.org/) and a few basic components:
 
 - The base Linux system
 - [fbDOOM](https://github.com/maximevince/fbDOOM)
@@ -24,67 +29,16 @@ The project is made out of a few basic components:
 
 ## Building
 
-As a one-liner:
+### Clone the repository
 
 ```sh
-curl -L https://buildroot.net/downloads/buildroot-$(git ls-remote --tags https://git.buildroot.net/buildroot.git | awk '!/{}/ {print $2}' | awk -F/ '!/rc/ {print $NF}' | grep -E '^[0-9]{4}' | sort -V | tail -n 1).tar.gz | tar xvzf - && git clone https://github.com/turtureanu/upbadoom.git && cd buildroot-* && make BR2_EXTERNAL=../upbadoom/buildroot-external/ x86_64_defconfig && make
+git clone https://github.com/turtureanu/UPBADOOM.git
+cd UPBADOOM
 ```
 
-### Configure `buildroot`
-
-#### Download `buildroot`
-
-Latest stable:
+### Run `build.sh`
 
 ```sh
-curl -L https://buildroot.net/downloads/buildroot-$(git ls-remote --tags https://git.buildroot.net/buildroot.git | awk '!/{}/ {print $2}' | awk -F/ '!/rc/ {print $NF}' | grep -E '^[0-9]{4}' | sort -V | tail -n 1).tar.gz | tar xvzf -
-```
-
-#### Clone this repository
-
-```sh
-git clone https://github.com/turtureanu/upbadoom.git
-```
-
-There are a few things that you **NEED TO CHANGE**:
-
-- `kexec` options
-- Syslinux display resolution
-
-To change the `kexec` commands, edit the `upbadoom/upbadoom.cpp` file:
-
-```cpp
-// kexec
-const std::string KEXEC_IMAGE =
-    "/boot/vmlinuz-linux-zen"; // path to kernel image
-
-const std::string KEXEC_CMDLINE =
-    "rw root=UUID=d5425ce5-fece-441f-92c0-440388cc9490 "
-    "rootflags=subvol=@ libata.allow_tpm=1 "
-    "resume=UUID=80489fcc-a413-4f7e-88f2-3c650633ab57"; // command line
-                                                        // options to pass
-                                                        // to kernel
-                                                        // (append)
-const std::string KEXEC_INITRD =
-    "/boot/initramfs-linux-zen.img"; // path to initrd (initramfs)
-
-```
-
-And to change the Syslinux display resolution, edit `buildroot-external/board/upbadoom/x86_64/syslinux.cfg`:
-
-```sh
-    append loglevel=0 libata.allow_tpm=1 video=efifb:width:1920,height:1080 quiet ro
-```
-
-#### Use the external tree
-
-```sh
-cd buildroot-*
-make BR2_EXTERNAL=../upbadoom/buildroot-external/ x86_64_defconfig
-```
-
-### Build
-
-```sh
-make
+chmod +x build.sh
+./build.sh
 ```

@@ -7,6 +7,7 @@
 #include <regex>
 #include <string>
 #include <sys/ioctl.h>
+#include <sys/reboot.h>
 #include <sys/wait.h>
 #include <termios.h>
 
@@ -18,27 +19,15 @@ int getRows();
 enum TerminalColor {
   COLOR_BLACK_FG = 30,
   COLOR_WHITE_BG = 47,
+  COLOR_GREEN = 32,
+  COLOR_MAGENTA = 35,
   COLOR_CYAN = 36,
   COLOR_DOOM_FG = 31, // red
 };
 
-// kexec
-const std::string KEXEC_IMAGE =
-    "/boot/vmlinuz-linux-zen"; // path to kernel image
-
-const std::string KEXEC_CMDLINE =
-    "rw root=UUID=d5425ce5-fece-441f-92c0-440388cc9490 "
-    "rootflags=subvol=@ libata.allow_tpm=1 "
-    "resume=UUID=80489fcc-a413-4f7e-88f2-3c650633ab57"; // command line
-                                                        // options to pass
-                                                        // to kernel
-                                                        // (append)
-const std::string KEXEC_INITRD =
-    "/boot/initramfs-linux-zen.img"; // path to initrd (initramfs)
-
 // sedutil
 const std::string SEDUTIL_CLI = "sedutil-cli";
-const std::string DRIVE_PATTERN = "nvme[0-9]{0,}n[0-9]|sd[0-9]";
+const std::string DRIVE_PATTERN = "nvme[0-9]{0,}n[0-9]$";
 
 // DOOM
 const std::string DOOM_COMMAND = "fbdoom";
@@ -51,29 +40,32 @@ const int MENU_END = MENU_START + MENU_WIDTH;
 const std::string GREETING = "WHY DID THE CHICKEN CROSS THE ROAD";
 const int MIDDLE = (getRows() - 2) / 2;
 const int GREETING_ROW = MIDDLE - 2;
+const char PASSWORD_CHAR_FOCUSED = '#';
+const char PASSWORD_CHAR_UNFOCUSED = '*';
 const int PASSWORD_ROW = MIDDLE;
 const std::string DOOM_TEXT = "DOOM";
 const int DOOM_ROW = MIDDLE + 2;
-const char PASSWORD_CHAR_FOCUSED = '#';
-const char PASSWORD_CHAR_UNFOCUSED = '*';
+const std::string UNLOCK_MESSAGE_SUCCESS = "TO GET TO THE OTHER SIDE";
+const std::string UNLOCK_MESSAGE_FAIL = "TO BOCK TRAFFIC";
+const int UNLOCK_MESSAGE_ROW = DOOM_ROW + 2;
 
 // get terminal rows
 int getRows() {
-  struct winsize window;
+  struct winsize window {};
   ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
   return window.ws_row;
 }
 
 // get terminal columns
 int getCols() {
-  struct winsize window;
+  struct winsize window {};
   ioctl(STDOUT_FILENO, TIOCGWINSZ, &window);
   return window.ws_col;
 }
 
 void configureTermios() {
   // Get current terminal settings
-  struct termios term;
+  struct termios term {};
   if (tcgetattr(STDIN_FILENO, &term) != 0) {
     perror("tcgetattr");
     return;
@@ -122,7 +114,7 @@ void moveCursor(unsigned int row, unsigned int col) {
   std::cout << "\033[" << row << ";" << col << "H";
 }
 
-void printSelectArrows(int row, int messageLength) {
+void printSelectArrows(int row, unsigned long int messageLength) {
   moveCursor(row, MENU_START + MENU_WIDTH / 2 - messageLength / 2 - 3);
   std::cout << "\033[" << COLOR_CYAN << "m"; // Set cyan fg
   std::cout << ">";                          // Before select arrow
@@ -131,14 +123,14 @@ void printSelectArrows(int row, int messageLength) {
   std::cout << "\033[0m"; // Reset color
 }
 
-void clearSelectArrows(int row, int messageLength) {
+void clearSelectArrows(int row, unsigned long int messageLength) {
   moveCursor(row, MENU_START + MENU_WIDTH / 2 - messageLength / 2 - 3);
   std::cout << " ";
   moveCursor(row, MENU_START + MENU_WIDTH / 2 + messageLength / 2 + 2);
   std::cout << " ";
 }
 
-void printCentered(int row, std::string message) {
+void printCentered(int row, const std::string &message) {
   moveCursor(row, (getCols() - message.length()) / 2);
   std::cout << message;
 }
@@ -150,89 +142,56 @@ int unlockSED(const std::string &password) {
 
   std::filesystem::directory_iterator dirIterator("/dev");
 
-  moveCursor(0, 0); // print possible errors at the top
-
   for (const auto &entry : dirIterator) {
     std::string entryFilename = entry.path().filename().string();
     if (std::regex_search(entryFilename, regexObj)) {
-
       pid_t pid;
 
       pid = fork();
 
-      if (pid == 0 && execlp(SEDUTIL_CLI.c_str(), SEDUTIL_CLI.c_str(),
-                             "--setLockingRange", "0", "rw", password.c_str(),
-                             entry.path().c_str(), nullptr) == -1) {
-        perror("");
+      if (pid == 0) {
+        execlp(SEDUTIL_CLI.c_str(), SEDUTIL_CLI.c_str(), "--setLockingRange",
+               "0", "rw", password.c_str(), entry.path().c_str(), nullptr);
         _Exit(EXIT_FAILURE); // exit child process immediately on failure
       }
-
       waitpid(pid, &status, 0);
 
       pid = fork();
-      if (pid == 0 &&
-          execlp(SEDUTIL_CLI.c_str(), SEDUTIL_CLI.c_str(), "--setMBRDone", "on",
-                 password.c_str(), entry.path().c_str(), nullptr) == -1) {
-        perror("");
+      if (pid == 0) {
+        execlp(SEDUTIL_CLI.c_str(), SEDUTIL_CLI.c_str(), "--setMBRDone", "on",
+               password.c_str(), entry.path().c_str(), nullptr);
         _Exit(EXIT_FAILURE); // exit child process immediately on failure
       }
 
       waitpid(pid, &status, 0);
     }
   }
-
-  moveCursor(PASSWORD_ROW, MENU_START + password.length() +
-                               1); // move back to the password field
-
   return status;
 }
 
-void bootKexec() {
-  pid_t pid = fork(); // make the child process
+void printMenu(int currentOption, unsigned long int passwordLength) {
+  moveCursor(PASSWORD_ROW, MENU_START);
 
-  if (pid == 0) {
-    // Redirect standard output and error to /dev/null
-    int devNull = open("/dev/null", O_WRONLY);
-    if (devNull == -1) {
-      perror("open /dev/null");
-    }
+  std::cout << "\033[1m\033[" << COLOR_BLACK_FG << ";" << COLOR_WHITE_BG
+            << "m"; // white bg
 
-    dup2(devNull, STDOUT_FILENO);
-    dup2(devNull, STDERR_FILENO);
-    close(devNull);
-
-    execlp("kexec", "kexec", "-l", KEXEC_IMAGE.c_str(),
-           ("--append=" + KEXEC_CMDLINE).c_str(),
-           ("--initrd=" + KEXEC_INITRD).c_str(), nullptr);
-
-    _Exit(EXIT_FAILURE); // exit child process immediately on failure
+  for (int i = 0; i < MENU_WIDTH; i++) {
+    std::cout << " ";
   }
 
-  waitpid(pid, nullptr, 0);
-}
-
-void printMenu(int currentOption, int passwordLength) {
-  moveCursor(PASSWORD_ROW, MENU_START);
+  moveCursor(PASSWORD_ROW, MENU_START + 1);
 
   if (currentOption == 0) {
     showCursor();
-    std::cout << "\033[1m\033[" << COLOR_BLACK_FG << ";" << COLOR_WHITE_BG
-              << "m"; // white bg
 
-    for (int i = 0; i < MENU_WIDTH; i++) {
-      std::cout << " ";
-    }
-
-    moveCursor(PASSWORD_ROW, MENU_START + 1);
-
-    for (int i = 0; i < passwordLength && i < MENU_WIDTH - 2; i++) {
+    for (unsigned long int i = 0; i < passwordLength && i < MENU_WIDTH - 2;
+         i++) {
       std::cout << PASSWORD_CHAR_FOCUSED;
     }
 
     std::cout << "\033[0m"; // reset
 
     clearSelectArrows(PASSWORD_ROW + 2, DOOM_TEXT.length());
-    // clear
     printSelectArrows(PASSWORD_ROW, MENU_WIDTH);
     printCentered(DOOM_ROW, DOOM_TEXT);
 
@@ -241,13 +200,14 @@ void printMenu(int currentOption, int passwordLength) {
     } else {
       moveCursor(PASSWORD_ROW, MENU_END - 1);
     }
+
   } else {
     hideCursor();
-    moveCursor(PASSWORD_ROW, MENU_START + 1);
 
     std::cout << "\033[1m\033[" << COLOR_BLACK_FG << ";" << COLOR_WHITE_BG
               << "m"; // white bg
-    for (int i = 0; i < passwordLength && i < MENU_WIDTH; i++) {
+    for (unsigned long int i = 0; i < passwordLength && i < MENU_WIDTH - 2;
+         i++) {
       std::cout << PASSWORD_CHAR_UNFOCUSED;
     }
 
@@ -262,33 +222,22 @@ void printMenu(int currentOption, int passwordLength) {
   }
 }
 
-void playDoom(const std::string doomCommand, const std::string iwad) {
-  pid_t pid = fork(); // make the child process
+void playDoom(const std::string &doomCommand, const std::string &iwad) {
+  std::cout << "\033c"; // clear the screen
+  pid_t pid = fork();   // make the child process
 
   if (pid == 0) {
     // child process
-
-    // Redirect standard output and error to /dev/null
-    int devNull = open("/dev/null", O_WRONLY);
-    if (devNull == -1) {
-      moveCursor(0, 0);
-      perror("open /dev/null");
-      _Exit(EXIT_FAILURE); // exit child process immediately on failure
-    }
-
-    dup2(devNull, STDOUT_FILENO);
-    dup2(devNull, STDERR_FILENO);
-    close(devNull);
-
     execlp(doomCommand.c_str(), doomCommand.c_str(), "-iwad", iwad.c_str(),
            nullptr);
     _Exit(EXIT_FAILURE); // exit child process immediately on failure
-  };
+  }
 
   waitpid(pid, nullptr, 0); // wait for the child process to finish
 }
 
 int main() {
+  reboot(RB_ENABLE_CAD);
   configureTermios();
   std::cout << "\033c"; // clear the screen
 
@@ -307,7 +256,7 @@ int main() {
   int c; // input char
 
   std::cout << "\033[0;" << COLOR_CYAN << "m";
-  printCentered(GREETING_ROW, "WHY DID THE CHICKEN CROSS THE ROAD");
+  printCentered(GREETING_ROW, GREETING);
   printMenu(0, 0);
   std::cout << "\033[0m";
 
@@ -333,11 +282,31 @@ int main() {
       }
     } else if (c == '\n') {
       if (currentOption == 0) {
+        moveCursor(0, 0);
         if (unlockSED(password) == 0) {
-          bootKexec();
+          std::cout << "\033[1;" << COLOR_GREEN << "m";
+          printCentered(UNLOCK_MESSAGE_ROW, UNLOCK_MESSAGE_SUCCESS);
+          reboot(RB_AUTOBOOT);
+        } else {
+          std::cout << "\033[1;" << COLOR_MAGENTA << "m";
+          printCentered(UNLOCK_MESSAGE_ROW, UNLOCK_MESSAGE_FAIL);
+          std::cout << "\033[0m";
+
+          if (password.length() < MENU_WIDTH - 2) {
+            moveCursor(PASSWORD_ROW, MENU_START + password.length() + 1);
+          } else {
+            moveCursor(PASSWORD_ROW, MENU_END - 1);
+          }
         }
       } else {
-        playDoom(DOOM_COMMAND, IWAD);
+        moveCursor(0, 0);
+        playDoom(DOOM_COMMAND, IWAD); // Delete to exit
+        std::cout << "\033c";         // clear the framebuffer
+
+        std::cout << "\033[0;" << COLOR_CYAN << "m";
+        printCentered(GREETING_ROW, GREETING);
+        printMenu(1, password.length());
+        std::cout << "\033[0m";
       }
     } else if (c == 127) { // backspace
       if (!password.empty()) {

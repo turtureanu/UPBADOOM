@@ -2,7 +2,10 @@
 [x] Setup the bootloader
 [x] Make the UPBADOOM program in C++
 [x] Write the configs/x86_64_defconfig file
-  [ ] Add acpid package
-  [ ] Test if you can poweroff using the power button (using acpid)
-  [ ] Write the kernel defconfig
-[ ] Add kernel defconfig to board/upbadoom/x86_64 and rename it to `linux.config`
+  [-] Add acpid package
+  [-] Test if you can poweroff using the power button (using acpid)
+    No idea why it's so broken
+  [-] Write the kernel defconfig
+    [ ] Figure out why you can't boot ANY kernel built by buildroot using SYSLINUX
+[x] Add kernel defconfig to board/upbadoom/x86_64 and rename it to `linux.config`
+[ ] Switch to a Unified Kernel Image or a better bootloader
