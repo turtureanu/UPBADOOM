@@ -1,24 +1,37 @@
 #!/bin/sh
 
-OUT_DIR=${BUILD_DIR}/../images
-IMAGE_NAME=UPBADOOM.img
-IMAGE_DIR=${OUT_DIR}/${IMAGE_NAME}-DIR
+# Also used in build.sh, so be careful when changing
+SYSLINUX_DIR=${BR2_EXTERNAL_UPBADOOM_PATH}/syslinux
 
-mkdir -p ${IMAGE_DIR}
+OUT_DIR=${BUILD_DIR}/../images
+IMAGE_NAME=UPBADOOM-$(git rev-parse HEAD | cut -c 1-8).img
+
+## Move previous image (whin debugging)
+# sudo mv "$OUT_DIR"/UPBADOOM*.img "$OUT_DIR"/UPBADOOM-previous.img
 
 ## Make the image
+cd "$OUT_DIR" || return
+dd if=/dev/zero of="${IMAGE_NAME}" bs=1M count=32
+(echo "n"; echo ""; echo ""; echo ""; echo "ef00"; echo w; echo Y) | gdisk "$IMAGE_NAME"
+LOOP=$(sudo losetup --show -f -o 1048576 "${IMAGE_NAME}")
+sudo mkfs.vfat "$LOOP"
+ls
+sudo mkdir image-mnt
+sudo mount "$LOOP" image-mnt
+ls
+sudo chmod 777 image-mnt
+sudo mkdir -p image-mnt/EFI/Boot/
+cd image-mnt/EFI/Boot/ || return
+sudo cp "$SYSLINUX_DIR"/syslinux.efi ./bootx64.efi # SYSLIUX_DIR defined in build.sh (root of repo)
+sudo cp "$SYSLINUX_DIR"/ldlinux.e64 ./
+sudo cp $BR2_EXTERNAL_UPBADOOM_PATH/board/upbadoom/x86_64/syslinux.cfg ./
+sudo cp "$OUT_DIR"/rootfs.cpio.gz ./
+sudo cp "$OUT_DIR"/bzImage ./
+cd "$OUT_DIR"
+sudo sync
+sudo umount image-mnt
+sudo losetup -d "$LOOP"
+sudo rmdir image-mnt
 
-cd ${OUT_DIR}
-dd if=/dev/zero of=${IMAGE_NAME} bs=1M count=32
-(echo "n";echo "";echo "";echo "";echo "ef00";echo w;echo Y) | gdisk $IMAGE_NAME
-sudo mkfs.vfat $IMAGE_NAME
-sudo mkdir $IMAGE_DIR
-sudo mount -t vfat -o loop,rw,uid=$(id -u),gid=$(id -g) ${IMAGE_NAME} ${IMAGE_DIR}
-sudo mkdir -p $IMAGE_DIR/EFI/Boot/
-sudo cp ${OUT_DIR}/syslinux/syslinux.efi ${IMAGE_DIR}/EFI/Boot/bootx64.efi
-sudo cp ${BUILD_DIR}/syslinux-*/efi64/com32/elflink/ldlinux/ldlinux.e64 ${IMAGE_DIR}/EFI/Boot/
-sudo cp ${OUT_DIR}/bzImage ${IMAGE_DIR}/EFI/Boot/
-sudo cp ${OUT_DIR}/rootfs.cpio.gz ${IMAGE_DIR}/EFI/Boot/
-sudo cp ${BR2_EXTERNAL_UPBADOOM_PATH}/board/upbadoom/x86_64/syslinux.cfg ${IMAGE_DIR}/EFI/Boot/
-sudo umount $IMAGE_NAME
-rmdir $IMAGE_DIR
+# If everything went well, delete the previous image (when debugging)
+# sudo rm "$OUT_DIR"/UPBADOOM-previous.img
