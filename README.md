@@ -6,8 +6,10 @@ Just another SED PBA with the option to play fbDOOM.
 
 > [!IMPORTANT]
 > SYSLINUX has trouble booting the bzImage (kernel) built by buildroot. \
-> The immediate fix is to replace it with a working one from e.g. ChubbyAnt's repo. \
+> The immediate fix is to replace it with a working one from e.g. ChubbyAnt's repo.* \
 > Not sure what causes this problem, might want to use a [Unified Kernel Image](https://wiki.archlinux.org/title/Unified_kernel_image) in the future instead.
+>
+> \* If you're not sure how to do that, this guide might provide the basic steps to repacking the image: https://github.com/Drive-Trust-Alliance/sedutil/issues/259
 
 The project is made using [buildroot](https://buildroot.org/) and a few basic components:
 
@@ -26,6 +28,7 @@ The project is made using [buildroot](https://buildroot.org/) and a few basic co
 - [DoomLinux](https://github.com/shadlyd15/DoomLinux)
 - [sedutil](https://github.com/Drive-Trust-Alliance/sedutil)
 - [sedutil (ChubbyAnt's fork)](https://github.com/ChubbyAnt/sedutil)
+- [[HowTo] SecureBoot support #259](https://github.com/Drive-Trust-Alliance/sedutil/issues/259)
 
 ## Building
 
