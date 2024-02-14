@@ -16,6 +16,7 @@ int getRows();
 
 // Terminal color codes
 // https://en.wikipedia.org/wiki/ANSI_escape_code#3-bit_and_4-bit
+// https://gist.github.com/JBlond/2fea43a3049b38287e5e9cefc87b2124
 enum TerminalColor {
   COLOR_BLACK_FG = 30,
   COLOR_WHITE_BG = 47,
@@ -25,11 +26,11 @@ enum TerminalColor {
   COLOR_DOOM_FG = 31, // red
 };
 
-// sedutil
+// sedutil binary
 const std::string SEDUTIL_CLI = "sedutil-cli";
 const std::string DRIVE_PATTERN = "nvme[0-9]{0,}n[0-9]$";
 
-// DOOM
+// DOOM binary
 const std::string DOOM_COMMAND = "fbdoom";
 const std::string IWAD = "/usr/share/games/doom/doom1.wad";
 
@@ -37,16 +38,15 @@ const std::string IWAD = "/usr/share/games/doom/doom1.wad";
 const int MENU_WIDTH = 28;
 const int MENU_START = (getCols() - MENU_WIDTH) / 2;
 const int MENU_END = MENU_START + MENU_WIDTH;
-const std::string GREETING = "WHY DID THE CHICKEN CROSS THE ROAD";
 const int MIDDLE = (getRows() - 2) / 2;
 const int GREETING_ROW = MIDDLE - 2;
 const char PASSWORD_CHAR_FOCUSED = '#';
 const char PASSWORD_CHAR_UNFOCUSED = '*';
-const int PASSWORD_ROW = MIDDLE;
-const std::string DOOM_TEXT = "DOOM";
+const int PASSWORD_ROW = MIDDLE + 1;
+const std::string DOOM_TEXT = "TAKE THE RED PILL!";
 const int DOOM_ROW = MIDDLE + 2;
-const std::string UNLOCK_MESSAGE_SUCCESS = "TO GET TO THE OTHER SIDE";
-const std::string UNLOCK_MESSAGE_FAIL = "TO BOCK TRAFFIC";
+const std::string UNLOCK_MESSAGE_SUCCESS = "You have to see it for yourself.";
+const std::string UNLOCK_MESSAGE_FAIL = "Ignorance is bliss";
 const int UNLOCK_MESSAGE_ROW = DOOM_ROW + 2;
 
 // get terminal rows
@@ -236,6 +236,14 @@ void playDoom(const std::string &doomCommand, const std::string &iwad) {
   waitpid(pid, nullptr, 0); // wait for the child process to finish
 }
 
+void printGreeting() {
+  std::cout << "\033[0;" << COLOR_GREEN << "m";
+  printCentered(GREETING_ROW, "Unfortunately, no one can ");
+  printCentered(GREETING_ROW + 1, "be told what the Matrix is");
+  printMenu(0, 0);
+  std::cout << "\033[0m";
+}
+
 int main() {
   reboot(RB_ENABLE_CAD);
   configureTermios();
@@ -255,10 +263,7 @@ int main() {
   std::string password;
   int c; // input char
 
-  std::cout << "\033[0;" << COLOR_CYAN << "m";
-  printCentered(GREETING_ROW, GREETING);
-  printMenu(0, 0);
-  std::cout << "\033[0m";
+  printGreeting();
 
   // endless menu loop
   while (1) {
@@ -288,7 +293,7 @@ int main() {
           printCentered(UNLOCK_MESSAGE_ROW, UNLOCK_MESSAGE_SUCCESS);
           reboot(RB_AUTOBOOT);
         } else {
-          std::cout << "\033[1;" << COLOR_MAGENTA << "m";
+          std::cout << "\033[1;" << COLOR_DOOM_FG << "m";
           printCentered(UNLOCK_MESSAGE_ROW, UNLOCK_MESSAGE_FAIL);
           std::cout << "\033[0m";
 
@@ -302,11 +307,8 @@ int main() {
         moveCursor(0, 0);
         playDoom(DOOM_COMMAND, IWAD); // Delete to exit
         std::cout << "\033c";         // clear the framebuffer
-
-        std::cout << "\033[0;" << COLOR_CYAN << "m";
-        printCentered(GREETING_ROW, GREETING);
-        printMenu(1, password.length());
-        std::cout << "\033[0m";
+        printGreeting();
+        printMenu(0, password.length());
       }
     } else if (c == 127) { // backspace
       if (!password.empty()) {
